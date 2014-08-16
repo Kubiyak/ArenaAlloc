@@ -1,0 +1,64 @@
+/************************************************************************************************************************
+ *
+ * A modified version of the example provided by Nicolai Josuttis.  This enhanced version is provided under the
+ * terms of the MIT license.
+ *
+ ***********************************************************************************************************************/
+
+#include <vector>
+#include "arenaalloc.h"
+#include <iostream>
+#include <map>
+#include <functional>
+
+int main()
+{
+    // create a vector, using ArenaAlloc::Alloc<int> as allocator
+    std::vector<int,ArenaAlloc::Alloc<int> > v;
+    
+    // insert elements
+    v.push_back(42);
+    v.push_back(56);
+    v.push_back(11);
+    v.push_back(22);
+    v.push_back(33);
+    v.push_back(44);
+
+    for( std::vector<int,ArenaAlloc::Alloc<int> >::iterator vItr = v.begin(); vItr != v.end(); ++vItr )
+    {
+      std::cout << *vItr << std::endl;
+    }
+
+    // Now lets try a map typedef'ed to use this allocator
+    typedef std::basic_string< char, std::char_traits<char>, ArenaAlloc::Alloc<char> > mystring;
+    typedef std::map< mystring, int, std::less<mystring>, ArenaAlloc::Alloc< std::pair< const mystring, int > > > mymap;
+
+    ArenaAlloc::Alloc<char> myCharAllocator( 256 );    
+    mystring m1( "hello world", myCharAllocator );
+
+    std::cout << "mystring: " << m1 << std::endl;
+
+    ArenaAlloc::Alloc<std::pair<const mystring, int> > myMapAllocator( myCharAllocator );
+    
+    
+    mymap map1( std::less< mystring >(), myMapAllocator );
+    
+    // to prevent the proliferation of unrelated instances of the allocator, some care must be taken when
+    // constructing string types.  
+    map1.insert( std::pair< const mystring, int >( mystring( "hello", myCharAllocator ), 1 ) );		  
+    map1.insert( std::pair< const mystring, int >( mystring( "world", myCharAllocator ), 2 ) );
+    
+    for( mymap::iterator mItr = map1.begin(); mItr != map1.end(); ++mItr )
+    {
+      std::cout << mItr->first << ": " << mItr->second << std::endl;
+    }
+
+    // construct a large string to force addition of a new memory block
+    mystring largeString( 255, 'c', myCharAllocator );
+    
+    // other examples will explore the runtime characteristics of the allocator in the presence of threads in comparison
+    // to the standard STL allocator.
+    
+    return 0;
+}
+
