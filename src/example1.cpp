@@ -6,10 +6,19 @@
  ***********************************************************************************************************************/
 
 #include <vector>
-#include "arenaalloc.h"
 #include <iostream>
 #include <map>
 #include <functional>
+
+#include "arenaalloc.h"
+
+// compile command:
+// g++ example1.cpp 
+// for extended tracing of the allocator do:
+// g++ -DARENA_ALLOC_DEBUG example1.cpp
+// Other examples will use c++11.  However, the allocator itself only uses C++98 constructs.
+// Mileage will vary with compilers other than g++4.7 although this should work well with any
+// g++ compiler since g++4.4.
 
 int main()
 {
@@ -39,8 +48,7 @@ int main()
     std::cout << "mystring: " << m1 << std::endl;
 
     ArenaAlloc::Alloc<std::pair<const mystring, int> > myMapAllocator( myCharAllocator );
-    
-    
+        
     mymap map1( std::less< mystring >(), myMapAllocator );
     
     // to prevent the proliferation of unrelated instances of the allocator, some care must be taken when

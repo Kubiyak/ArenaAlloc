@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /******************************************************************************
  *  arenaalloc.h
  *  
@@ -94,11 +95,17 @@ namespace ArenaAlloc
   struct _memblockimpl
   { 
     
-    // to get around some sticky accesss issues between Alloc<T1> and Alloc<T2> when sharing
+  private:
+    // to get around some sticky access issues between Alloc<T1> and Alloc<T2> when sharing
     // the implementation.
+    template <typename U>
+    friend class Alloc;
+
     template< typename T> 
     static void assign( const Alloc<T>& src, _memblockimpl *& dest );
-
+    
+  public:
+    
     _memblockimpl( std::size_t defaultSize ):
       m_head(0),
       m_current(0),
@@ -121,12 +128,12 @@ namespace ArenaAlloc
     {
       char * ptrToReturn = m_current->allocate( numBytes );
       if( !ptrToReturn )
-      {
-	allocateNewBlock( numBytes > m_defaultSize / 2 ? numBytes*2 : 
-			  m_defaultSize );
+	{
+	  allocateNewBlock( numBytes > m_defaultSize / 2 ? numBytes*2 : 
+			    m_defaultSize );
 
-	ptrToReturn = m_current->allocate( numBytes );	
-      }
+	  ptrToReturn = m_current->allocate( numBytes );	
+	}
 
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "_memblockimpl=%p allocated %ld bytes at address=%p\n", this, numBytes, ptrToReturn );
@@ -142,11 +149,11 @@ namespace ArenaAlloc
 
       _memblock * block = m_head;
       while( block )
-      {
-	_memblock * curr = block;
-	block = block->m_next;
-	delete curr;
-      }
+	{
+	  _memblock * curr = block;
+	  block = block->m_next;
+	  delete curr;
+	}
     }
   
     // The ref counting model does not permit the copying of 
@@ -186,14 +193,14 @@ namespace ArenaAlloc
 #endif      
       
       if( m_head == 0 )
-      {
-	m_head = m_current = newBlock;
-      }
+	{
+	  m_head = m_current = newBlock;
+	}
       else
-      {
-	m_current->m_next = newBlock;
-	m_current = newBlock;
-      }      
+	{
+	  m_current->m_next = newBlock;
+	  m_current = newBlock;
+	}      
     }    
   };
   
@@ -231,7 +238,6 @@ namespace ArenaAlloc
       m_impl( new _memblockimpl( defaultSize ) )
     {      
     }
-
     
     Alloc(const Alloc& src)  throw(): 
       m_impl( src.m_impl )
@@ -323,11 +329,11 @@ namespace ArenaAlloc
     return !( t2.equals( t1.m_impl ) );
   }
 
-template<typename T>
-void _memblockimpl::assign( const Alloc<T>& src, _memblockimpl *& dest )
-{
-  dest = const_cast<_memblockimpl*>(src.m_impl);
-}
+  template<typename T>
+  void _memblockimpl::assign( const Alloc<T>& src, _memblockimpl *& dest )
+  {
+    dest = const_cast<_memblockimpl*>(src.m_impl);
+  }
     
 }
 
