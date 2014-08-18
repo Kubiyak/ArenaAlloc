@@ -31,7 +31,7 @@
 
 // In my testing of this not perfectly scientific example, the standard allocator + tcmalloc was faster by
 // a little bit over the arena allocator with the standard malloc.  Both of those were significantly 
-// faster than the standard allocator by itself.  I kept getting a core dump when 
+// faster than the standard allocator with the standard malloc.  I kept getting a core dump when 
 // running the arena allocator with tcmalloc so I cannot present results on that.  Give it a try though.
 // It's possible there may be a problem in how my code is structured for tcmalloc to work with the arena allocator.
 
@@ -107,7 +107,6 @@ struct task
 int main()
 {
   
-
   size_t concurrency = std::thread::hardware_concurrency();
   std::cout << "Running with " << concurrency << " threads" << std::endl;
   
