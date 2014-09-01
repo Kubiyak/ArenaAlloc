@@ -125,7 +125,7 @@ int main()
   std::cout << "Waiting a bit before waking the stalled threads" << std::endl;
   std::this_thread::sleep_for( std::chrono::seconds( 5 ) );
   
-  std::cout << "And there off...!" << std::endl;
+  std::cout << "And they're off...!" << std::endl;
   runBool = true;
   cv.notify_all();
   

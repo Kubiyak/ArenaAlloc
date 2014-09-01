@@ -8,24 +8,11 @@
  *  
  *****************************************************************************/
 
-/* Original copyright notice appearing in the example code provided by
- * Nicolai Josuttis:
- *
- * The following code example is taken from the book
- * "The C++ Standard Library - A Tutorial and Reference"
- * by Nicolai M. Josuttis, Addison-Wesley, 1999
- *
- * (C) Copyright Nicolai M. Josuttis 1999.
- * Permission to copy, use, modify, sell and distribute this software
- * is granted provided this copyright notice appears in all copies.
- * This software is provided "as is" without express or implied
- * warranty, and with no claim as to its suitability for any purpose.
- */
-
 #ifndef _ARENA_ALLOC_H
 #define _ARENA_ALLOC_H
 
 #include <limits>
+#include <memory>
 
 // Define macro ARENA_ALLOC_DEBUG to enable some tracing of the allocator
 
@@ -36,11 +23,15 @@
 namespace ArenaAlloc 
 {
   // internal structure for tracking memory blocks
+  template < typename AllocImpl >
   struct _memblock
   {
     // allocations are rounded up to a multiple of the size of this
     // struct to maintain proper alignment for any pointer and double
     // values stored in the allocation.
+    // A future goal is to support even stricter alignment for example
+    // to support cache alignment, special device  dependent mappings,
+    // or GPU ops.    
     union _roundsize
     {
       double d;
@@ -52,10 +43,10 @@ namespace ArenaAlloc
     std::size_t m_index; // index of next allocatable byte in the block
     char * m_buffer; // pointer to large block to allocate from
     
-    _memblock( std::size_t bufferSize ):
+    _memblock( std::size_t bufferSize, AllocImpl& allocImpl ):
       m_bufferSize( roundSize( bufferSize ) ),
       m_index( 0 ),
-      m_buffer( new char[ m_bufferSize ] ) // this works b/c of order of decl
+      m_buffer( reinterpret_cast<char*>( allocImpl.allocate( bufferSize ) ) ) // this works b/c of order of decl
     {
     }
 
@@ -79,38 +70,65 @@ namespace ArenaAlloc
       return ptrToReturn;
     }
   
+    void dispose( AllocImpl& impl )
+    {
+      impl.deallocate( m_buffer );
+    }
+
     ~_memblock()
     {
-      delete[] m_buffer;
     }  
   };
 
-  template< typename T >
+  template< typename T, typename A >
   class Alloc;
   
   // Each allocator points to an instance of _memblockimpl which
   // contains the list of _memblock objects and other tracking info
-  // including a refcount.  This must be created on the heap as the
-  // reference counting model requires it.
+  // including a refcount.
+  // This object is instantiated in space obtained from the allocator
+  // implementation. The allocator implementation is the component
+  // on which allocate/deallocate are called to obtain storage from.
+  template< typename AllocatorImpl >
   struct _memblockimpl
   { 
     
   private:
     // to get around some sticky access issues between Alloc<T1> and Alloc<T2> when sharing
     // the implementation.
-    template <typename U>
+    template <typename U, typename A>
     friend class Alloc;
 
-    template< typename T> 
-    static void assign( const Alloc<T>& src, _memblockimpl *& dest );
+    template< typename T >
+    static void assign( const Alloc<T,AllocatorImpl>& src, _memblockimpl *& dest );
     
-  public:
+    AllocatorImpl m_alloc;
+    std::size_t m_refCount; // when refs -> 0 delete this
+    std::size_t m_defaultSize;
+    std::size_t m_num; // number of times allocate called
     
-    _memblockimpl( std::size_t defaultSize ):
+    _memblock<AllocatorImpl> * m_head;
+    _memblock<AllocatorImpl> * m_current;
+    
+    static _memblockimpl<AllocatorImpl> * create( size_t defaultSize, AllocatorImpl& alloc )
+    {
+      return new ( alloc.allocate( sizeof( _memblockimpl ) ) ) _memblockimpl<AllocatorImpl>( defaultSize, alloc );
+    }
+   
+    static void destroy( _memblockimpl<AllocatorImpl> * objToDestroy )
+    {
+      
+      AllocatorImpl allocImpl = objToDestroy->m_alloc;
+      objToDestroy-> ~_memblockimpl<AllocatorImpl>();
+      allocImpl.deallocate( objToDestroy );      
+    }
+    
+    _memblockimpl( std::size_t defaultSize, AllocatorImpl& allocImpl ):
       m_head(0),
       m_current(0),
       m_defaultSize( defaultSize ),
-      m_refCount( 1 )
+      m_refCount( 1 ),
+      m_alloc( allocImpl )
     {
       // This is practical software.  Avoid academic matters at all cost
       if( m_defaultSize < 256 )
@@ -147,18 +165,20 @@ namespace ArenaAlloc
       fprintf( stdout, "~memblockimpl() called on _memblockimpl=%p\n", this );
 #endif
 
-      _memblock * block = m_head;
+      _memblock<AllocatorImpl> * block = m_head;
       while( block )
 	{
-	  _memblock * curr = block;
+	  _memblock<AllocatorImpl> * curr = block;
 	  block = block->m_next;
-	  delete curr;
+	  curr->dispose( m_alloc );
+	  curr->~_memblock<AllocatorImpl>();
+	  m_alloc.deallocate( curr );
 	}
     }
   
-    // The ref counting model does not permit the copying of 
-    // this object across separate threads.  If that's necessary, then consider 
-    // using the standard allocator provided with the STL
+    // The ref counting model does not permit the sharing of 
+    // this object across multiple threads unless an external locking mechanism is applied 
+    // to ensure the atomicity of the reference count.  
     void incrementRefCount() { 
       ++m_refCount; 
 #ifdef ARENA_ALLOC_DEBUG
@@ -174,20 +194,18 @@ namespace ArenaAlloc
 #endif      
       
       if( m_refCount == 0 )
-	delete this;
+      {
+	_memblockimpl<AllocatorImpl>::destroy( this );
+      }
     }          
   private:
-
-    std::size_t m_refCount; // when refs -> 0 delete this
-    std::size_t m_defaultSize;
-    std::size_t m_num; // number of times allocate called
-    
-    _memblock * m_head;
-    _memblock * m_current;
     
     void allocateNewBlock( std::size_t blockSize )
     {
-      _memblock * newBlock = new _memblock( blockSize );
+      
+      _memblock<AllocatorImpl> * newBlock = new ( m_alloc.allocate( sizeof( _memblock<AllocatorImpl> ) ) )
+	_memblock<AllocatorImpl>( blockSize, m_alloc );
+						  
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "_memblockimpl=%p allocating a new block of size=%ld\n", this, blockSize );
 #endif      
@@ -203,12 +221,21 @@ namespace ArenaAlloc
 	}      
     }    
   };
+
+  struct _newAllocatorImpl
+  {
+    // these two functions should be supported by a specialized
+    // allocator for shared memory or another source of specialized
+    // memory such as device mapped memory.
+    void* allocate( size_t numBytes ) { return new char[ numBytes ]; }
+    void deallocate( void* ptr ) { delete[]( (char*)ptr ); }
+  };
   
-  template <class T>
+  template <class T, class AllocatorImpl = _newAllocatorImpl >
   class Alloc {
     
-  private:        
-    mutable _memblockimpl * m_impl;    
+  private:    
+    _memblockimpl<AllocatorImpl> * m_impl;    
     
   public:
     // type definitions
@@ -223,7 +250,7 @@ namespace ArenaAlloc
     // rebind allocator to type U
     template <class U>
     struct rebind {
-      typedef Alloc<U> other;
+      typedef Alloc<U,AllocatorImpl> other;
     };
    
     // return address of values
@@ -234,8 +261,8 @@ namespace ArenaAlloc
       return &value;
     }
 
-    Alloc( std::size_t defaultSize = 10240 ) throw():
-      m_impl( new _memblockimpl( defaultSize ) )
+    Alloc( std::size_t defaultSize = 32768, AllocatorImpl allocImpl = AllocatorImpl() ) throw():
+      m_impl( _memblockimpl<AllocatorImpl>::create( defaultSize, allocImpl ) )
     {      
     }
     
@@ -246,13 +273,13 @@ namespace ArenaAlloc
     }
     
     
-    friend struct _memblockimpl;
+    friend struct _memblockimpl<AllocatorImpl>;
     
     template <class U>
-    Alloc (const Alloc<U>& src) throw(): 
+    Alloc (const Alloc<U,AllocatorImpl>& src) throw(): 
       m_impl( 0 )
     {
-      _memblockimpl::assign( src, m_impl );
+      _memblockimpl<AllocatorImpl>::assign( src, m_impl );
       m_impl->incrementRefCount();
     }
     
@@ -295,7 +322,7 @@ namespace ArenaAlloc
       // object go out of scope.      
     }
     
-    bool equals( const _memblockimpl * impl ) const
+    bool equals( const _memblockimpl<AllocatorImpl> * impl ) const
     {
       return impl == m_impl;
     }
@@ -306,33 +333,34 @@ namespace ArenaAlloc
     }
   
     template <typename U>
-    friend bool operator == ( const Alloc& t1, const Alloc<U>& t2 ) throw();
+    friend bool operator == ( const Alloc& t1, const Alloc<U,AllocatorImpl>& t2 ) throw();
 
     template <typename U>
-    friend bool operator != ( const Alloc& t1, const Alloc<U>& t2 ) throw();
+    friend bool operator != ( const Alloc& t1, const Alloc<U,AllocatorImpl>& t2 ) throw();
     
   };
 
   // return that all specializations of this allocator sharing an implementation
   // are equal
-  template <class T1, class T2>
-  bool operator== (const Alloc<T1>& t1,
-		   const Alloc<T2>& t2) throw() 
+  template <class T1, class T2, class T3>
+  bool operator== (const Alloc<T1,T3>& t1,
+		   const Alloc<T2,T3>& t2) throw() 
   {    
     return t2.equals ( t1.m_impl );
   }
   
-  template <class T1, class T2>
-  bool operator!= (const Alloc<T1>& t1,
-		   const Alloc<T2>& t2) throw() 
+  template <class T1, class T2, class T3>
+  bool operator!= (const Alloc<T1,T3>& t1,
+		   const Alloc<T2,T3>& t2) throw() 
   {
     return !( t2.equals( t1.m_impl ) );
   }
 
+  template<typename A>
   template<typename T>
-  void _memblockimpl::assign( const Alloc<T>& src, _memblockimpl *& dest )
+  void _memblockimpl<A>::assign( const Alloc<T,A>& src, _memblockimpl<A> *& dest )
   {
-    dest = const_cast<_memblockimpl*>(src.m_impl);
+    dest = const_cast<_memblockimpl<A>* >(src.m_impl);
   }
     
 }
