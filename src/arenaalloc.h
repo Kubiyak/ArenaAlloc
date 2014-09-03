@@ -13,6 +13,7 @@
 
 #include <limits>
 #include <memory>
+#include <type_traits>
 
 // Define macro ARENA_ALLOC_DEBUG to enable some tracing of the allocator
 
@@ -105,7 +106,16 @@ namespace ArenaAlloc
     AllocatorImpl m_alloc;
     std::size_t m_refCount; // when refs -> 0 delete this
     std::size_t m_defaultSize;
-    std::size_t m_num; // number of times allocate called
+    
+    // when m_numAllocate is large and m_numDeallocate approaches m_numAllocate
+    // there may be significant free space available which can be 
+    // reclaimed by copying the remaining active elements into a new 
+    // a container with a new instance of the allocator and then
+    // deleting the old allocator.
+    
+    std::size_t m_numAllocate; // number of times allocate called
+    std::size_t m_numDeallocate; // number of time deallocate called
+    std::size_t m_numBytesAllocated; // A good estimate of amount of space used
     
     _memblock<AllocatorImpl> * m_head;
     _memblock<AllocatorImpl> * m_current;
@@ -128,7 +138,10 @@ namespace ArenaAlloc
       m_current(0),
       m_defaultSize( defaultSize ),
       m_refCount( 1 ),
-      m_alloc( allocImpl )
+      m_alloc( allocImpl ),
+      m_numBytesAllocated( 0 ),
+      m_numAllocate( 0 ),
+      m_numDeallocate( 0 )
     {
       // This is practical software.  Avoid academic matters at all cost
       if( m_defaultSize < 256 )
@@ -156,7 +169,16 @@ namespace ArenaAlloc
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "_memblockimpl=%p allocated %ld bytes at address=%p\n", this, numBytes, ptrToReturn );
 #endif
+
+      ++ m_numAllocate;
+      m_numBytesAllocated += numBytes; // does not account for the small overhead in tracking the allocation
+      
       return ptrToReturn;
+    }
+    
+    void deallocate( void * ptr )
+    {
+      ++ m_numDeallocate;
     }
   
     ~_memblockimpl( )
@@ -198,7 +220,6 @@ namespace ArenaAlloc
 	_memblockimpl<AllocatorImpl>::destroy( this );
       }
     }          
-  private:
     
     void allocateNewBlock( std::size_t blockSize )
     {
@@ -220,6 +241,10 @@ namespace ArenaAlloc
 	  m_current = newBlock;
 	}      
     }    
+    
+    size_t getNumAllocations() { return m_numAllocate; }
+    size_t getNumDeallocations() { return m_numDeallocate; }
+    size_t getNumBytesAllocated() { return m_numBytesAllocated; }
   };
 
   struct _newAllocatorImpl
@@ -246,6 +271,18 @@ namespace ArenaAlloc
     typedef const T& const_reference;
     typedef std::size_t    size_type;
     typedef std::ptrdiff_t difference_type;
+
+#if __cplusplus >= 201103L
+    // when containers are swapped, (i.e. vector.swap)
+    // swap the allocators also.  This was not specified in c++98
+    // thus users of this code not using c++11 must
+    // exercise caution when using the swap algorithm or
+    // specialized swap member function.  Specifically,
+    // don't swap containers not sharing the same
+    // allocator internal implementation in c++98.  This is ok
+    // in c++11.
+    typedef std::true_type propagate_on_container_swap;
+#endif
 
     // rebind allocator to type U
     template <class U>
@@ -317,9 +354,8 @@ namespace ArenaAlloc
     // deallocate storage p of deleted elements
     void deallocate (pointer p, size_type num) 
     {
-      // Note: This does nothing.  Space reclaimed
-      // when all allocators sharing the _impl in this
-      // object go out of scope.      
+      // update stats related to allocations
+      m_impl->deallocate( p );
     }
     
     bool equals( const _memblockimpl<AllocatorImpl> * impl ) const
@@ -337,7 +373,11 @@ namespace ArenaAlloc
 
     template <typename U>
     friend bool operator != ( const Alloc& t1, const Alloc<U,AllocatorImpl>& t2 ) throw();
-    
+
+    // These are extension functions not required for an stl allocator
+    size_t getNumAllocations() { return m_impl->getNumAllocations(); }
+    size_t getNumDeallocations() { return m_impl->getNumDeallocations(); }
+    size_t getNumBytesAllocated() { return m_impl->getNumBytesAllocated(); }    
   };
 
   // return that all specializations of this allocator sharing an implementation

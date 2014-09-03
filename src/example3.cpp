@@ -49,7 +49,7 @@ struct MMappedRegion
     
     return true;
   }
-
+  
   void dispose()
   {
     if( m_addr )
@@ -94,28 +94,39 @@ struct MMappedRegion
 int main()
 {
   
-  MMappedRegion r1( 1024*1024*16 ); // 16 mb mapping
-  if( !r1.init() )
+  MMappedRegion r1( 1024*1024*8 ); // 8 mb mapping
+  MMappedRegion r2( 1024*1024*8 );
+  if( !( r1.init() && r2.init() ) )
     exit( 1 );
   
   {
-    ArenaAlloc::Alloc<int, MMappedRegion> alloc( 32768, r1 );
-    std::vector<int, ArenaAlloc::Alloc<int,MMappedRegion> > v1( alloc );
+    auto alloc1 = new ArenaAlloc::Alloc<int, MMappedRegion> ( 32768, r1 );
+    auto v1 = new std::vector<int, ArenaAlloc::Alloc<int,MMappedRegion> >( *alloc1 );
     
-    for( size_t i = 0; i < 100; i++ )
+    // inserting into an array will cause several deallocations of the internal
+    // array which become outsized.
+    for( size_t i = 0; i < 1024; i++ )
     {
-      v1.push_back(i);
+      v1->push_back(i);
     }    
-
-    for( int i : v1 )
-    {
-      std::cout << i << " ";
-    }
-    std::cout << std::endl;    
+    
+    std::cout << "Num bytes allocated in original allocator: " << alloc1->getNumBytesAllocated() << std::endl;
+    
+    // now create a new vector with a new allocator and copy in the original
+    // note that vector.swap is ineffective for recovering space.  
+    auto alloc2 = new ArenaAlloc::Alloc<int,MMappedRegion>( 32768, r2 );
+    auto v2 = new std::vector<int, ArenaAlloc::Alloc<int,MMappedRegion> >( *v1, *alloc2 );
+    
+    delete v1;
+    delete alloc1;
+    
+    std::cout << "Num bytes allocated in second allocator: " << alloc2->getNumBytesAllocated() << std::endl;
+    delete v2;
+    delete alloc2;
   }
-
   
-  r1.dispose();  
+  r1.dispose();
+  r2.dispose();
   return 0;
 }
 
