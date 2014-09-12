@@ -282,6 +282,10 @@ namespace ArenaAlloc
     // allocator internal implementation in c++98.  This is ok
     // in c++11.
     typedef std::true_type propagate_on_container_swap;
+
+    // container moves should move the allocator also.
+    typedef std::true_type propagate_on_container_move_assignment;        
+    
 #endif
 
     // rebind allocator to type U
