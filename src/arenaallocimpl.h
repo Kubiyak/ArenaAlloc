@@ -245,13 +245,15 @@ namespace ArenaAlloc
   { 
     
   private:
+
+    typedef _memblockimplbase< AllocatorImpl, _memblockimpl<AllocatorImpl> > base_t;
+    friend struct _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >;
+    
     // to get around some sticky access issues between Alloc<T1> and Alloc<T2> when sharing
     // the implementation.
     template <typename U, typename A>
     friend class Alloc;
-
-    friend struct _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >;
-
+    
     template< typename T >
     static void assign( const Alloc<T,AllocatorImpl>& src, _memblockimpl *& dest );
         
@@ -274,18 +276,16 @@ namespace ArenaAlloc
 
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "_memblockimpl=%p constructed with default size=%ld\n", this, 
-	       _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >::m_defaultSize );
+	       base_t::m_defaultSize );
 #endif
-
     }
   
     ~_memblockimpl( )
     {
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "~memblockimpl() called on _memblockimpl=%p\n", this );
-#endif
-      
-      _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >::clear();
+#endif      
+      base_t::clear();
     }  
   };
 
