@@ -78,6 +78,161 @@ namespace ArenaAlloc
   
   };
 
+  
+  template< typename AllocatorImpl, typename Derived >
+  struct _memblockimplbase
+  {
+
+    AllocatorImpl m_alloc;
+    std::size_t m_refCount; // when refs -> 0 delete this
+    std::size_t m_defaultSize;
+        
+    std::size_t m_numAllocate; // number of times allocate called
+    std::size_t m_numDeallocate; // number of time deallocate called
+    std::size_t m_numBytesAllocated; // A good estimate of amount of space used
+    
+    _memblock<AllocatorImpl> * m_head;
+    _memblock<AllocatorImpl> * m_current;
+
+    // round up 2 next power of 2 if not already
+    // a power of 2
+    std::size_t roundpow2( std::size_t value )
+    {
+      // note this works because subtracting 1 is equivalent to
+      // inverting the lowest set bit and complementing any
+      // bits lower than that.  only a power of 2
+      // will yield 0 in the following check
+      if( 0 == ( value & ( value - 1 ) ) )
+	return value; // already a power of 2
+      
+      // fold t over itself. This will set all bits after the highest set bit of t to 1
+      // who said bit twiddling wasn't practical?
+      value |= value >> 1;
+      value |= value >> 2;
+      value |= value >> 4;
+      value |= value >> 8;
+      value |= value >> 16;
+      value |= value >> 32;
+
+      return value + 1;            
+    }
+
+    _memblockimplbase( std::size_t defaultSize, AllocatorImpl& allocator ):
+      m_alloc( allocator ),
+      m_refCount( 1 ),
+      m_defaultSize( defaultSize ),
+      m_numAllocate( 0 ),
+      m_numDeallocate( 0 ),
+      m_numBytesAllocated( 0 ),
+      m_head( 0 ),
+      m_current( 0 )
+    {
+      
+      if( m_defaultSize < 256 )
+      {
+	m_defaultSize = 256; // anything less is academic. a more practical size is 4k or more
+      }
+      else if ( m_defaultSize > 1024UL*1024*1024*16 ) 
+      {
+	// when this becomes a problem, this package has succeeded beyond my wildest expectations
+	m_defaultSize = 1024*1024*1024*16;
+      }
+      
+      // for convenience block size should be a power of 2
+      // round up to next power of 2
+      m_defaultSize = roundpow2( m_defaultSize );
+      allocateNewBlock( m_defaultSize );      
+    }
+        
+    char * allocate( std::size_t numBytes )
+    {
+      char * ptrToReturn = m_current->allocate( numBytes );
+      if( !ptrToReturn )
+      {
+	allocateNewBlock( numBytes > m_defaultSize / 2 ? roundpow2( numBytes*2 ) : 
+			  m_defaultSize );
+	
+	ptrToReturn = m_current->allocate( numBytes );	
+      }
+      
+#ifdef ARENA_ALLOC_DEBUG
+      fprintf( stdout, "_memblockimpl=%p allocated %ld bytes at address=%p\n", this, numBytes, ptrToReturn );
+#endif
+
+      ++ m_numAllocate;
+      m_numBytesAllocated += numBytes; // does not account for the small overhead in tracking the allocation
+      
+      return ptrToReturn;
+    }
+    
+    void allocateNewBlock( std::size_t blockSize )
+    {
+      
+      _memblock<AllocatorImpl> * newBlock = new ( m_alloc.allocate( sizeof( _memblock<AllocatorImpl> ) ) )
+	_memblock<AllocatorImpl>( blockSize, m_alloc );
+						  
+#ifdef ARENA_ALLOC_DEBUG
+      fprintf( stdout, "_memblockimplbase=%p allocating a new block of size=%ld\n", this, blockSize );
+#endif      
+      
+      if( m_head == 0 )
+      {
+	m_head = m_current = newBlock;
+      }
+      else
+      {
+	m_current->m_next = newBlock;
+	m_current = newBlock;
+      }      
+    }    
+    
+    void deallocate( void * ptr )
+    {
+      ++ m_numDeallocate;
+    }
+    
+    size_t getNumAllocations() { return m_numAllocate; }
+    size_t getNumDeallocations() { return m_numDeallocate; }
+    size_t getNumBytesAllocated() { return m_numBytesAllocated; }
+  
+    void clear()
+    {
+      _memblock<AllocatorImpl> * block = m_head;
+      while( block )
+      {
+	_memblock<AllocatorImpl> * curr = block;
+	block = block->m_next;
+	curr->dispose( m_alloc );
+	curr->~_memblock<AllocatorImpl>();
+	m_alloc.deallocate( curr );
+      }      
+    }    
+
+    // The ref counting model does not permit the sharing of 
+    // this object across multiple threads unless an external locking mechanism is applied 
+    // to ensure the atomicity of the reference count.  
+    void incrementRefCount() 
+    { 
+      ++m_refCount; 
+#ifdef ARENA_ALLOC_DEBUG
+      fprintf( stdout, "ref count on _memblockimplbase=%p incremented to %ld\n", this, m_refCount );
+#endif      
+    }
+
+    void decrementRefCount()
+    {
+      --m_refCount;
+#ifdef ARENA_ALLOC_DEBUG
+      fprintf( stdout, "ref count on _memblockimplbase=%p decremented to %ld\n", this, m_refCount );
+#endif      
+      
+      if( m_refCount == 0 )
+      {
+	Derived::destroy( static_cast<Derived*>(this) );
+      }
+    }                      
+  };
+
 
   // Each allocator points to an instance of _memblockimpl which
   // contains the list of _memblock objects and other tracking info
@@ -86,7 +241,7 @@ namespace ArenaAlloc
   // implementation. The allocator implementation is the component
   // on which allocate/deallocate are called to obtain storage from.
   template< typename AllocatorImpl >
-  struct _memblockimpl
+  struct _memblockimpl : public _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >
   { 
     
   private:
@@ -95,26 +250,11 @@ namespace ArenaAlloc
     template <typename U, typename A>
     friend class Alloc;
 
+    friend struct _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >;
+
     template< typename T >
     static void assign( const Alloc<T,AllocatorImpl>& src, _memblockimpl *& dest );
-    
-    AllocatorImpl m_alloc;
-    std::size_t m_refCount; // when refs -> 0 delete this
-    std::size_t m_defaultSize;
-    
-    // when m_numAllocate is large and m_numDeallocate approaches m_numAllocate
-    // there may be significant free space available which can be 
-    // reclaimed by copying the remaining active elements into a new 
-    // a container with a new instance of the allocator and then
-    // deleting the old allocator.
-    
-    std::size_t m_numAllocate; // number of times allocate called
-    std::size_t m_numDeallocate; // number of time deallocate called
-    std::size_t m_numBytesAllocated; // A good estimate of amount of space used
-    
-    _memblock<AllocatorImpl> * m_head;
-    _memblock<AllocatorImpl> * m_current;
-    
+        
     static _memblockimpl<AllocatorImpl> * create( size_t defaultSize, AllocatorImpl& alloc )
     {
       return new ( alloc.allocate( sizeof( _memblockimpl ) ) ) _memblockimpl<AllocatorImpl>( defaultSize, alloc );
@@ -129,51 +269,14 @@ namespace ArenaAlloc
     }
     
     _memblockimpl( std::size_t defaultSize, AllocatorImpl& allocImpl ):
-      m_head(0),
-      m_current(0),
-      m_defaultSize( defaultSize ),
-      m_refCount( 1 ),
-      m_alloc( allocImpl ),
-      m_numBytesAllocated( 0 ),
-      m_numAllocate( 0 ),
-      m_numDeallocate( 0 )
+      _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >( defaultSize, allocImpl )
     {
-      // This is practical software.  Avoid academic matters at all cost
-      if( m_defaultSize < 256 )
-	m_defaultSize = 256; 
-      
-      allocateNewBlock( m_defaultSize );
 
 #ifdef ARENA_ALLOC_DEBUG
-      fprintf( stdout, "_memblockimpl=%p constructed with default size=%ld\n", this, m_defaultSize );
+      fprintf( stdout, "_memblockimpl=%p constructed with default size=%ld\n", this, 
+	       _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >::m_defaultSize );
 #endif
 
-    }
-
-    char * allocate( std::size_t numBytes )
-    {
-      char * ptrToReturn = m_current->allocate( numBytes );
-      if( !ptrToReturn )
-      {
-	allocateNewBlock( numBytes > m_defaultSize / 2 ? numBytes*2 : 
-			  m_defaultSize );
-
-	ptrToReturn = m_current->allocate( numBytes );	
-      }
-
-#ifdef ARENA_ALLOC_DEBUG
-      fprintf( stdout, "_memblockimpl=%p allocated %ld bytes at address=%p\n", this, numBytes, ptrToReturn );
-#endif
-
-      ++ m_numAllocate;
-      m_numBytesAllocated += numBytes; // does not account for the small overhead in tracking the allocation
-      
-      return ptrToReturn;
-    }
-    
-    void deallocate( void * ptr )
-    {
-      ++ m_numDeallocate;
     }
   
     ~_memblockimpl( )
@@ -181,66 +284,9 @@ namespace ArenaAlloc
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "~memblockimpl() called on _memblockimpl=%p\n", this );
 #endif
-
-      _memblock<AllocatorImpl> * block = m_head;
-      while( block )
-      {
-	_memblock<AllocatorImpl> * curr = block;
-	block = block->m_next;
-	curr->dispose( m_alloc );
-	curr->~_memblock<AllocatorImpl>();
-	m_alloc.deallocate( curr );
-      }
-    }
-  
-    // The ref counting model does not permit the sharing of 
-    // this object across multiple threads unless an external locking mechanism is applied 
-    // to ensure the atomicity of the reference count.  
-    void incrementRefCount() 
-    { 
-      ++m_refCount; 
-#ifdef ARENA_ALLOC_DEBUG
-      fprintf( stdout, "ref count on _memblockimpl=%p incremented to %ld\n", this, m_refCount );
-#endif      
-    }
-
-    void decrementRefCount()
-    {
-      --m_refCount;
-#ifdef ARENA_ALLOC_DEBUG
-      fprintf( stdout, "ref count on _memblockimpl=%p decremented to %ld\n", this, m_refCount );
-#endif      
       
-      if( m_refCount == 0 )
-      {
-	_memblockimpl<AllocatorImpl>::destroy( this );
-      }
-    }          
-    
-    void allocateNewBlock( std::size_t blockSize )
-    {
-      
-      _memblock<AllocatorImpl> * newBlock = new ( m_alloc.allocate( sizeof( _memblock<AllocatorImpl> ) ) )
-	_memblock<AllocatorImpl>( blockSize, m_alloc );
-						  
-#ifdef ARENA_ALLOC_DEBUG
-      fprintf( stdout, "_memblockimpl=%p allocating a new block of size=%ld\n", this, blockSize );
-#endif      
-      
-      if( m_head == 0 )
-      {
-	m_head = m_current = newBlock;
-      }
-      else
-      {
-	m_current->m_next = newBlock;
-	m_current = newBlock;
-      }      
-    }    
-    
-    size_t getNumAllocations() { return m_numAllocate; }
-    size_t getNumDeallocations() { return m_numDeallocate; }
-    size_t getNumBytesAllocated() { return m_numBytesAllocated; }
+      _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >::clear();
+    }  
   };
 
 
