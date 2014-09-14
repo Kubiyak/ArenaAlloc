@@ -1,7 +1,7 @@
 ArenaAlloc
 ==============
 
-Arena allocator for STL containers.  Based on the sample code provided by Nicolai Josuttis available from here:
+Arena allocator for C++ STL containers.  Based on the sample code provided by Nicolai Josuttis available from here:
 http://www.josuttis.com/libbook/examples.html
 
 License
@@ -23,7 +23,7 @@ Intended Pattern Of Usage
 Reclaiming Memory
 =================
 
-The intent of this code is to provide an allocator for code which conforms in whole or substantially with the pattern of usage described above.  The allocator will NOT re-use deleted resources directly.  In order to improve memory usage characteristics, the application should implement a generational garbage collection strategy as needed.  What that means is, periodically, copy stuff you need to keep around into a different container backed by a different allocator.  Then clean up the original containers and the allocator backing those containers.  Examples will be provided for further clarification.
+The intent of this code is to provide an allocator for code which conforms in whole or substantially with the pattern of usage described above.  The allocator in arenaalloc.h will NOT re-use deleted resources directly.  (On the other hand, writing a wrapper allocator which does re-use freed blocks is not too difficult and an example of that will be provided.)  In order to improve memory usage characteristics, the application should implement a generational garbage collection strategy as needed.  What that means is, periodically, copy stuff you need to keep around into a different container backed by a different allocator.  Then clean up the original containers and the allocator backing those containers.  Examples will be provided for further clarification.
 
 Caveats
 =======
