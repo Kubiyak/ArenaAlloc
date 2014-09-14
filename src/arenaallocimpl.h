@@ -74,15 +74,12 @@ namespace ArenaAlloc
 
     ~_memblock()
     {
-    }  
-  
+    }    
   };
-
   
   template< typename AllocatorImpl, typename Derived >
   struct _memblockimplbase
   {
-
     AllocatorImpl m_alloc;
     std::size_t m_refCount; // when refs -> 0 delete this
     std::size_t m_defaultSize;
@@ -126,8 +123,7 @@ namespace ArenaAlloc
       m_numBytesAllocated( 0 ),
       m_head( 0 ),
       m_current( 0 )
-    {
-      
+    {      
       if( m_defaultSize < 256 )
       {
 	m_defaultSize = 256; // anything less is academic. a more practical size is 4k or more
@@ -135,7 +131,7 @@ namespace ArenaAlloc
       else if ( m_defaultSize > 1024UL*1024*1024*16 ) 
       {
 	// when this becomes a problem, this package has succeeded beyond my wildest expectations
-	m_defaultSize = 1024*1024*1024*16;
+	m_defaultSize = 1024UL*1024*1024*16;
       }
       
       // for convenience block size should be a power of 2
@@ -166,8 +162,7 @@ namespace ArenaAlloc
     }
     
     void allocateNewBlock( std::size_t blockSize )
-    {
-      
+    {      
       _memblock<AllocatorImpl> * newBlock = new ( m_alloc.allocate( sizeof( _memblock<AllocatorImpl> ) ) )
 	_memblock<AllocatorImpl>( blockSize, m_alloc );
 						  
@@ -242,8 +237,7 @@ namespace ArenaAlloc
   // on which allocate/deallocate are called to obtain storage from.
   template< typename AllocatorImpl >
   struct _memblockimpl : public _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >
-  { 
-    
+  {     
   private:
 
     typedef _memblockimplbase< AllocatorImpl, _memblockimpl<AllocatorImpl> > base_t;
@@ -263,8 +257,7 @@ namespace ArenaAlloc
     }
    
     static void destroy( _memblockimpl<AllocatorImpl> * objToDestroy )
-    {
-      
+    {      
       AllocatorImpl allocImpl = objToDestroy->m_alloc;
       objToDestroy-> ~_memblockimpl<AllocatorImpl>();
       allocImpl.deallocate( objToDestroy );      
@@ -273,7 +266,6 @@ namespace ArenaAlloc
     _memblockimpl( std::size_t defaultSize, AllocatorImpl& allocImpl ):
       _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >( defaultSize, allocImpl )
     {
-
 #ifdef ARENA_ALLOC_DEBUG
       fprintf( stdout, "_memblockimpl=%p constructed with default size=%ld\n", this, 
 	       base_t::m_defaultSize );
