@@ -33,11 +33,13 @@ namespace ArenaAlloc
     void deallocate( void* ptr ) { delete[]( (char*)ptr ); }
   };
   
-  template <class T, class AllocatorImpl = _newAllocatorImpl >
+  template <class T, 
+	    class AllocatorImpl = _newAllocatorImpl, 
+	    class MemblockImpl = _memblockimpl<AllocatorImpl> >
   class Alloc {
     
-  private:    
-    _memblockimpl<AllocatorImpl> * m_impl;    
+  private:        
+    MemblockImpl* m_impl;    
     
   public:
     // type definitions
@@ -48,7 +50,7 @@ namespace ArenaAlloc
     typedef const T& const_reference;
     typedef std::size_t    size_type;
     typedef std::ptrdiff_t difference_type;
-
+    
 #if __cplusplus >= 201103L
     // when containers are swapped, (i.e. vector.swap)
     // swap the allocators also.  This was not specified in c++98
@@ -64,11 +66,11 @@ namespace ArenaAlloc
     typedef std::true_type propagate_on_container_move_assignment;        
     
 #endif
-
+    
     // rebind allocator to type U
     template <class U>
     struct rebind {
-      typedef Alloc<U,AllocatorImpl> other;
+      typedef Alloc<U,AllocatorImpl,MemblockImpl> other;
     };
    
     // return address of values
@@ -80,7 +82,7 @@ namespace ArenaAlloc
     }
 
     Alloc( std::size_t defaultSize = 32768, AllocatorImpl allocImpl = AllocatorImpl() ) throw():
-      m_impl( _memblockimpl<AllocatorImpl>::create( defaultSize, allocImpl ) )
+      m_impl( MemblockImpl::create( defaultSize, allocImpl ) )
     {      
     }
     
@@ -90,11 +92,8 @@ namespace ArenaAlloc
       m_impl->incrementRefCount();
     }
     
-    
-    friend struct _memblockimpl<AllocatorImpl>;
-    
     template <class U>
-    Alloc (const Alloc<U,AllocatorImpl>& src) throw(): 
+    Alloc (const Alloc<U,AllocatorImpl,MemblockImpl>& src) throw(): 
       m_impl( 0 )
     {
       _memblockimpl<AllocatorImpl>::assign( src, m_impl );
@@ -139,7 +138,7 @@ namespace ArenaAlloc
       m_impl->deallocate( p );
     }
     
-    bool equals( const _memblockimpl<AllocatorImpl> * impl ) const
+    bool equals( const MemblockImpl * impl ) const
     {
       return impl == m_impl;
     }
@@ -149,6 +148,8 @@ namespace ArenaAlloc
       return m_impl == t2.m_impl;
     }
   
+    friend MemblockImpl;
+
     template <typename U>
     friend bool operator == ( const Alloc& t1, const Alloc<U,AllocatorImpl>& t2 ) throw();
 
@@ -163,23 +164,23 @@ namespace ArenaAlloc
 
   // return that all specializations of this allocator sharing an implementation
   // are equal
-  template <class T1, class T2, class T3>
-  bool operator== (const Alloc<T1,T3>& t1,
-		   const Alloc<T2,T3>& t2) throw() 
+  template <class T1, class T2, class T3, class M>
+  bool operator== (const Alloc<T1,T3, M>& t1,
+		   const Alloc<T2,T3, M>& t2) throw() 
   {    
     return t2.equals ( t1.m_impl );
   }
   
-  template <class T1, class T2, class T3>
-  bool operator!= (const Alloc<T1,T3>& t1,
-		   const Alloc<T2,T3>& t2) throw() 
+  template <class T1, class T2, class T3, class M>
+  bool operator!= (const Alloc<T1,T3, M>& t1,
+		   const Alloc<T2,T3, M>& t2) throw() 
   {
     return !( t2.equals( t1.m_impl ) );
   }
-
+  
   template<typename A>
   template<typename T>
-  void _memblockimpl<A>::assign( const Alloc<T,A>& src, _memblockimpl<A> *& dest )
+  void _memblockimpl<A>::assign( const Alloc<T,A, _memblockimpl<A> >& src, _memblockimpl<A> *& dest )
   {
     dest = const_cast<_memblockimpl<A>* >(src.m_impl);
   }

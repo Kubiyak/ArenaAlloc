@@ -16,7 +16,7 @@
 namespace ArenaAlloc
 {
 
-  template< typename T, typename A >
+  template< typename T, typename A, typename M >
   class Alloc;
   
   // internal structure for tracking memory blocks
@@ -245,11 +245,12 @@ namespace ArenaAlloc
     
     // to get around some sticky access issues between Alloc<T1> and Alloc<T2> when sharing
     // the implementation.
-    template <typename U, typename A>
+    template <typename U, typename A, typename M >
     friend class Alloc;
     
     template< typename T >
-    static void assign( const Alloc<T,AllocatorImpl>& src, _memblockimpl *& dest );
+    static void assign( const Alloc<T,AllocatorImpl, _memblockimpl<AllocatorImpl> >& src, 
+			  _memblockimpl *& dest );
         
     static _memblockimpl<AllocatorImpl> * create( size_t defaultSize, AllocatorImpl& alloc )
     {
