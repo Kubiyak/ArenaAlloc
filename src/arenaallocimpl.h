@@ -1,5 +1,5 @@
 // -*- c++ -*-
-/*****************************************************************************
+/******************************************************************************
  **  arenaallocimpl.h
  **  
  **  Internal implementation types of the arena allocator
@@ -240,8 +240,8 @@ namespace ArenaAlloc
   {     
   private:
 
-    typedef _memblockimplbase< AllocatorImpl, _memblockimpl<AllocatorImpl> > base_t;
-    friend struct _memblockimplbase<AllocatorImpl, _memblockimpl<AllocatorImpl> >;
+    typedef struct _memblockimplbase< AllocatorImpl, _memblockimpl<AllocatorImpl> > base_t;
+    friend struct _memblockimplbase< AllocatorImpl, _memblockimpl<AllocatorImpl> >;
     
     // to get around some sticky access issues between Alloc<T1> and Alloc<T2> when sharing
     // the implementation.
@@ -253,7 +253,8 @@ namespace ArenaAlloc
         
     static _memblockimpl<AllocatorImpl> * create( size_t defaultSize, AllocatorImpl& alloc )
     {
-      return new ( alloc.allocate( sizeof( _memblockimpl ) ) ) _memblockimpl<AllocatorImpl>( defaultSize, alloc );
+      return new ( alloc.allocate( sizeof( _memblockimpl ) ) ) _memblockimpl<AllocatorImpl>( defaultSize, 
+											     alloc );
     }
    
     static void destroy( _memblockimpl<AllocatorImpl> * objToDestroy )
@@ -280,8 +281,6 @@ namespace ArenaAlloc
       base_t::clear();
     }  
   };
-
-
 }
 
 #endif
