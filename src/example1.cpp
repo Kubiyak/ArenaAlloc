@@ -63,9 +63,17 @@ int main()
 
     // construct a large string to force addition of a new memory block
     mystring largeString( 255, 'c', myCharAllocator );
+
+    // check equality of the allocators
+    bool eq = myCharAllocator == myMapAllocator;
+    bool neq = myCharAllocator != myMapAllocator;
     
+    std::cout << "Char allocator == Map allocator: " << eq << std::endl;
+    std::cout << "Char allocator != Map allocator: " << neq << std::endl;
+
     // other examples will explore the runtime characteristics of the allocator in the presence of threads in comparison
     // to the standard STL allocator.
+    
     
     return 0;
 }

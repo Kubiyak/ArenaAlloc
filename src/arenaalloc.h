@@ -149,34 +149,24 @@ namespace ArenaAlloc
     }
   
     friend MemblockImpl;
-
-    template <typename U>
-    friend bool operator == ( const Alloc& t1, const Alloc<U,AllocatorImpl>& t2 ) throw();
-
-    template <typename U>
-    friend bool operator != ( const Alloc& t1, const Alloc<U,AllocatorImpl>& t2 ) throw();
-
+    
+    template< typename Other >
+    bool operator == ( const Alloc< Other, AllocatorImpl, MemblockImpl >& t2 )
+    {
+      return t2.equals( m_impl );
+    }
+  
+    template< typename Other >
+    bool operator != ( const Alloc< Other, AllocatorImpl, MemblockImpl >& t2 )
+    {
+      return !t2.equals( m_impl );
+    }
+  
     // These are extension functions not required for an stl allocator
     size_t getNumAllocations() { return m_impl->getNumAllocations(); }
     size_t getNumDeallocations() { return m_impl->getNumDeallocations(); }
     size_t getNumBytesAllocated() { return m_impl->getNumBytesAllocated(); }    
   };
-
-  // return that all specializations of this allocator sharing an implementation
-  // are equal
-  template <class T1, class T2, class T3, class M>
-  bool operator== (const Alloc<T1,T3, M>& t1,
-		   const Alloc<T2,T3, M>& t2) throw() 
-  {    
-    return t2.equals ( t1.m_impl );
-  }
-  
-  template <class T1, class T2, class T3, class M>
-  bool operator!= (const Alloc<T1,T3, M>& t1,
-		   const Alloc<T2,T3, M>& t2) throw() 
-  {
-    return !( t2.equals( t1.m_impl ) );
-  }
   
   template<typename A>
   template<typename T>
@@ -184,7 +174,7 @@ namespace ArenaAlloc
   {
     dest = const_cast<_memblockimpl<A>* >(src.m_impl);
   }
-    
+  
 }
 
 
