@@ -152,7 +152,7 @@ namespace ArenaAlloc
 	  else
 	    prev->m_next = current->m_next;
 	  
-	  return reinterpret_cast<char*>(current->m_next);
+	  return reinterpret_cast<char*>(current);
 	}
 	
 	++count;
