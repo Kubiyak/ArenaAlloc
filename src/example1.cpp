@@ -12,6 +12,10 @@
 
 #include "arenaalloc.h"
 
+#ifdef RECYCLE_ALLOCATOR_TEST
+#include "recyclealloc.h"
+#endif
+
 // compile command:
 // g++ example1.cpp 
 // for extended tracing of the allocator do:
@@ -39,15 +43,22 @@ int main()
     }
 
     // Now lets try a map typedef'ed to use this allocator
+#ifdef RECYCLE_ALLOCATOR_TEST
+    // note this requires std=c++11 
+    typedef std::basic_string< char, std::char_traits<char>, ArenaAlloc::RecycleAlloc<char> > mystring;
+    typedef std::map< mystring, int, std::less<mystring>, ArenaAlloc::RecycleAlloc< std::pair< const mystring, int > > > mymap;    
+    ArenaAlloc::RecycleAlloc<char> myCharAllocator( 256 );    
+    ArenaAlloc::RecycleAlloc<std::pair<const mystring, int> > myMapAllocator( myCharAllocator );
+#else
     typedef std::basic_string< char, std::char_traits<char>, ArenaAlloc::Alloc<char> > mystring;
     typedef std::map< mystring, int, std::less<mystring>, ArenaAlloc::Alloc< std::pair< const mystring, int > > > mymap;
-
     ArenaAlloc::Alloc<char> myCharAllocator( 256 );    
+    ArenaAlloc::Alloc<std::pair<const mystring, int> > myMapAllocator( myCharAllocator );
+#endif
+
     mystring m1( "hello world", myCharAllocator );
 
     std::cout << "mystring: " << m1 << std::endl;
-
-    ArenaAlloc::Alloc<std::pair<const mystring, int> > myMapAllocator( myCharAllocator );
         
     mymap map1( std::less< mystring >(), myMapAllocator );
     
@@ -73,8 +84,7 @@ int main()
 
     // other examples will explore the runtime characteristics of the allocator in the presence of threads in comparison
     // to the standard STL allocator.
-    
-    
+        
     return 0;
 }
 

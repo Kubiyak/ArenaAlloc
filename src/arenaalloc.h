@@ -96,7 +96,7 @@ namespace ArenaAlloc
     Alloc (const Alloc<U,AllocatorImpl,MemblockImpl>& src) throw(): 
       m_impl( 0 )
     {
-      _memblockimpl<AllocatorImpl>::assign( src, m_impl );
+      MemblockImpl::assign( src, m_impl );
       m_impl->incrementRefCount();
     }
     
@@ -134,7 +134,6 @@ namespace ArenaAlloc
     // deallocate storage p of deleted elements
     void deallocate (pointer p, size_type num) 
     {
-      // update stats related to allocations
       m_impl->deallocate( p );
     }
     
@@ -176,6 +175,5 @@ namespace ArenaAlloc
   }
   
 }
-
 
 #endif

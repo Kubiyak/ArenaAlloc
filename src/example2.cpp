@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <map>
 #include "arenaalloc.h"
+#include "recyclealloc.h"
 
 // As promised in example1.cpp, this example requires c++11
 
@@ -81,22 +82,33 @@ struct task
   {
     
     // insert a million values into a map<int,strtype> using the specified map type
-#ifdef ARENA_ALLOCATOR_TEST
+#if defined (ARENA_ALLOCATOR_TEST)
     typedef std::basic_string<char, std::char_traits<char>, ArenaAlloc::Alloc<char> > strtype;
     ArenaAlloc::Alloc< char > charAllocator( 65536 );
     strtype answerToEverything( "42", charAllocator );
     
     ArenaAlloc::Alloc< std::pair< const int, strtype > > alloc( 65536 );
     std::map< int, strtype , std::less<int>, ArenaAlloc::Alloc<std::pair<const int,strtype> > > intToStrMap( std::less<int>(), alloc );    
-#else
+#elif defined(RECYCLE_ALLOCATOR_TEST)
+    typedef std::basic_string<char, std::char_traits<char>, ArenaAlloc::RecycleAlloc<char> > strtype;
+    ArenaAlloc::RecycleAlloc< char > charAllocator( 65536 );
+    strtype answerToEverything( "42", charAllocator );
+    
+    ArenaAlloc::RecycleAlloc< std::pair< const int, strtype > > alloc( 65536 );    
+    std::map< int, strtype , std::less<int>, ArenaAlloc::RecycleAlloc<std::pair<const int,strtype> > > 
+      intToStrMap( std::less<int>(), alloc );      
+#else 
     typedef std::string strtype;
     std::map<int, strtype> intToStrMap;
     std::string answerToEverything( "42" );
 #endif
     
     for( int i = 0; i < 10000000; i++ )
-    {
+    {      
       intToStrMap.insert( std::pair< const int, strtype >( i, answerToEverything ) ); // The answer to everything
+      
+      if( i > 10 && ( i % 5 == 0 ) )
+	intToStrMap.erase( i - 5 ); // to provide some re-use for for testing the recycle allocator
     }
     
     // Note: time to clear allocator is included in the runtime.
