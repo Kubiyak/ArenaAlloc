@@ -40,7 +40,7 @@ typedef std::chrono::high_resolution_clock::time_point hres_t;
 typedef std::chrono::duration<size_t, std::ratio<1,1000000> > duration_t; // duration in micro-seconds
 
 struct task
-{  
+{    
   std::mutex& m_mutexRef;
   std::condition_variable& m_condVarRef;
   bool& m_run;
@@ -65,8 +65,8 @@ struct task
 
     hres_t start = std::chrono::high_resolution_clock::now();
     
-    // do map insert
-    doWork();
+    // do map insert / delete
+    std::size_t numBytesAllocated = doWork();
     
     hres_t end = std::chrono::high_resolution_clock::now();    
     duration_t timespan =  std::chrono::duration_cast< duration_t >( end - start );
@@ -74,11 +74,12 @@ struct task
     {
       // report timing results w/ lock held so that the output isn't all munged
       std::lock_guard<std::mutex> lg( m_mutexRef );
-      std::cout << "threadid: " << std::this_thread::get_id() << " clicks: " << timespan.count() << std::endl;    
+      std::cout << "threadid: " << std::this_thread::get_id() << " clicks: " << timespan.count();    
+      std::cout << " bytes allocated: " << numBytesAllocated << std::endl;
     }
   }    
   
-  void doWork()
+  std::size_t doWork()
   {
     
     // insert a million values into a map<int,strtype> using the specified map type
@@ -112,6 +113,7 @@ struct task
     }
     
     // Note: time to clear allocator is included in the runtime.
+    return charAllocator.getNumBytesAllocated() + alloc.getNumBytesAllocated();
   }
   
 };
@@ -140,7 +142,7 @@ int main()
   std::cout << "And they're off...!" << std::endl;
   runBool = true;
   cv.notify_all();
-  
+
   std::for_each( threads.begin(), threads.end(), std::mem_fn( &std::thread::join ) );  
   return 0;
 }
