@@ -86,8 +86,7 @@ namespace ArenaAlloc
     char * allocate( std::size_t numBytes )
     {      
       
-      numBytes += sizeof( std::size_t ); // for the size in header
-      numBytes = ( (numBytes + StepSize - 1) / StepSize ) * StepSize;
+      numBytes = ( (numBytes + sizeof( std::size_t ) + StepSize - 1) / StepSize ) * StepSize;
       
       char * returnValue = allocateInternal( numBytes );
       if( !returnValue )
@@ -98,7 +97,7 @@ namespace ArenaAlloc
 	  return 0; //allocation failure
 
 	*((std::size_t*)allocValue ) = numBytes; // that includes the header
-	returnValue = allocValue + sizeof( std::size_t );
+	return allocValue + sizeof( std::size_t );
       }
       
       return returnValue;
@@ -128,7 +127,6 @@ namespace ArenaAlloc
       // large enough for the specified size
       for( uint16_t bkt = bucketNumber, i = 0; i < 3 && bkt < NumBuckets; ++i, ++bkt )
       {
-	
 	if( m_buckets[ bkt ] )
 	  return allocateFrom( numBytes, m_buckets[ bkt ] );
       }
@@ -152,7 +150,7 @@ namespace ArenaAlloc
 	  else
 	    prev->m_next = current->m_next;
 	  
-	  return reinterpret_cast<char*>(current);
+	  return reinterpret_cast<char*>(&current->m_next);
 	}
 	
 	++count;
