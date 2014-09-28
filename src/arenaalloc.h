@@ -16,6 +16,7 @@
 
 #if __cplusplus >= 201103L
 #include <type_traits>
+#include <utility>
 #endif
 
 // Define macro ARENA_ALLOC_DEBUG to enable some tracing of the allocator
@@ -63,8 +64,7 @@ namespace ArenaAlloc
     typedef std::true_type propagate_on_container_swap;
 
     // container moves should move the allocator also.
-    typedef std::true_type propagate_on_container_move_assignment;        
-    
+    typedef std::true_type propagate_on_container_move_assignment;    
 #endif
     
     // rebind allocator to type U
@@ -118,18 +118,25 @@ namespace ArenaAlloc
     }
 
     // initialize elements of allocated storage p with value value
-    void construct (pointer p, const T& value) 
+#if __cplusplus >= 201103L
+
+    // use c++11 style forwarding to construct the object    
+    template< typename P, typename... Args>
+    void construct( P* obj, Args&&... args )
     {
-      // initialize memory with placement new
-      new((void*)p)T(value);
+      ::new((void*) obj ) P( std::forward<Args>( args )... );
     }
 
-    // destroy elements of initialized storage p
-    void destroy (pointer p) 
+    template< typename P >
+    void destroy( P* obj ) { obj->~P(); }
+    
+#else
+    void construct (pointer p, const T& value) 
     {
-      // destroy objects by calling their destructor
-      p->~T();
+      new((void*)p)T(value);
     }
+    void destroy (pointer p) { p->~T(); }
+#endif
 
     // deallocate storage p of deleted elements
     void deallocate (pointer p, size_type num) 

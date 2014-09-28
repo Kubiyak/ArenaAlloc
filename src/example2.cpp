@@ -75,7 +75,11 @@ struct task
       // report timing results w/ lock held so that the output isn't all munged
       std::lock_guard<std::mutex> lg( m_mutexRef );
       std::cout << "threadid: " << std::this_thread::get_id() << " clicks: " << timespan.count();    
+#if defined( ARENA_ALLOCATOR_TEST  ) || ( RECYCLE_ALLOCATOR_TEST )
       std::cout << " bytes allocated: " << numBytesAllocated << std::endl;
+#else
+      std::cout << std::endl;
+#endif
     }
   }    
   
@@ -102,6 +106,7 @@ struct task
     typedef std::string strtype;
     std::map<int, strtype> intToStrMap;
     std::string answerToEverything( "42" );
+    std::allocator<char> charAllocator();
 #endif
     
     for( int i = 0; i < 10000000; i++ )
@@ -113,7 +118,11 @@ struct task
     }
     
     // Note: time to clear allocator is included in the runtime.
+#if defined( ARENA_ALLOCATOR_TEST ) || ( RECYCLE_ALLOCATOR_TEST )
     return charAllocator.getNumBytesAllocated() + alloc.getNumBytesAllocated();
+#else
+    return 0;
+#endif
   }
   
 };
